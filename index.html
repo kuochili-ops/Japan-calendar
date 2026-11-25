@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>浮世繪白六・2027 3D 翻書月曆</title>
+  <style>
+    :root {
+      --washi-bg: #ebe4d5;
+      --paper-surface: #faf7f0;
+      --paper-shadow: rgba(34, 26, 18, 0.24);
+      --ink-main: #231b14;
+      --ink-sub: #6a5d4f;
+      --accent-vermilion: #b53f2b;
+      --accent-lunar: #2c4b64;
+      --line-soft: rgba(90, 74, 56, 0.22);
+      --line-strong: rgba(90, 74, 56, 0.42);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background-color: var(--washi-bg);
+      background-image:
+        radial-gradient(circle at 18% 12%, rgba(255, 252, 245, 0.8), transparent 45%),
+        radial-gradient(circle at 85% 88%, rgba(166, 142, 108, 0.2), transparent 50%);
+      color: var(--ink-main);
+      font-family: "Noto Serif TC", "PingFang TC", "Microsoft JhengHei", serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 10px 32px;
+    }
+
+    .calendar-shell {
+      width: 100%;
+      max-width: 680px;
+      touch-action: pan-x pan-y;
+      position: relative;
+      box-shadow: 0 16px 34px var(--paper-shadow);
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--paper-surface);
+    }
+
+    .calendar-dom-page {
+      width: 100%;
+      background: var(--paper-surface);
+      border: 1px solid rgba(90, 74, 56, 0.2);
+    }
+
+    #threeFlipCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    #threeFlipCanvas.active {
+      display: block;
+    }
+
+    .art-banner {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #e6dfd0;
+      overflow: hidden;
+    }
+
+    .art-banner img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .binding-band {
+      position: relative;
+      background: linear-gradient(180deg, #ece5d5 0%, #f5f0e5 38%, #f2ece0 100%);
+      border-top: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-strong);
+      box-shadow: inset 0 3px 6px rgba(34, 26, 18, 0.12);
+      padding: 6px 14px 8px;
+    }
+
+    .wire-holes {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px 6px;
+    }
+
+    .wire-punch {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #4e453b;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .sheet-month-title {
+      text-align: center;
+      font-size: 1.08rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--ink-main);
+    }
+
+    .month-grid-wrap {
+      padding: 8px 14px 16px;
+      background: var(--paper-surface);
+    }
+
+    .dow-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      column-gap: 6px;
+      text-align: center;
+      font-size: 0.74rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--ink-sub);
+      padding: 4px 2px 8px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .dow-row span:first-child,
+    .dow-row span:last-child {
+      color: var(--accent-vermilion);
+    }
+
+    .dates-table {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      border-left: 1px solid var(--line-soft);
+    }
+
+    .date-box {
+      position: relative;
+      min-height: 62px;
+      padding: 4px 6px;
+      border-right: 1px solid var(--line-soft);
+      border-bottom: 1px solid var(--line-soft);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .date-box.dimmed {
+      color: #a39788;
+      background: rgba(168, 155, 138, 0.08);
+    }
+
+    .date-box.today-mark {
+      background: rgba(181, 63, 43, 0.08);
+      outline: 1.5px solid var(--accent-vermilion);
+      outline-offset: -1.5px;
+    }
+
+    .box-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 2px;
+    }
+
+    .solar-day {
+      font-size: 0.88rem;
+      font-weight: 600;
+      line-height: 1.15;
+    }
+
+    .date-box:nth-child(7n+1):not(.dimmed) .solar-day,
+    .date-box:nth-child(7n):not(.dimmed) .solar-day {
+      color: var(--accent-vermilion);
+    }
+
+    .lunar-tag {
+      font-size: 0.62rem;
+      line-height: 1.1;
+      color: var(--ink-sub);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .lunar-tag.month-start {
+      color: var(--accent-lunar);
+      font-weight: 700;
+    }
+
+    .gesture-tip {
+      margin-top: 10px;
+      font-size: 0.76rem;
+      color: var(--ink-sub);
+      text-align: center;
+    }
+  </style>
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+</head>
+<body>
+  <div class="calendar-shell" id="calendarShell">
+    <div id="domMount"></div>
+    <canvas id="threeFlipCanvas"></canvas>
+  </div>
+
+  <div class="gesture-tip">兩指可自由放大縮小｜單指往上撥下一頁、往下撥上一頁</div>
+
+  <script>
+    const MONTH_LABELS = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    const WEEKDAY_ABBR = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+    const LUNAR_MONTH_WORDS = [
+      "正", "二", "三", "四", "五", "六",
+      "七", "八", "九", "十", "冬", "臘"
+    ];
+
+    const LUNAR_DAY_WORDS = [
+      "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+      "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+      "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"
+    ];
+
+    const imageCache = new Map();
+    function loadMonthImage(month0) {
+      if (imageCache.has(month0)) return Promise.resolve(imageCache.get(month0));
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          imageCache.set(month0, img);
+          resolve(img);
+        };
+        img.onerror = () => resolve(null);
+        img.src = `images/${String(month0 + 1).padStart(2, "0")}.png`;
+      });
+    }
+
+    for (let m = 0; m < 12; m++) {
+      loadMonthImage(m);
+    }
+
+    let audioCtx = null;
+    function playPaperFlipSound(dir) {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+        const len = Math.floor(audioCtx.sampleRate * 0.26);
+        const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) {
+          const p = i / len;
+          ch[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * p) * (1 - p * 0.35) * 0.14;
+        }
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(dir > 0 ? 1120 : 940, audioCtx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(dir > 0 ? 1680 : 720, audioCtx.currentTime + 0.26);
+        filter.Q.value = 1.25;
+        src.connect(filter);
+        filter.connect(audioCtx.destination);
+        src.start();
+      } catch (_) {}
+    }
+
+    function getLunarText(dateObj) {
+      try {
+        const fmt = new Intl.DateTimeFormat("zh-TW-u-ca-chinese", {
+          month: "numeric",
+          day: "numeric"
+        });
+        const parts = fmt.formatToParts(dateObj);
+        let mNum = null;
+        let leap = false;
+        let dNum = null;
+
+        for (const part of parts) {
+          if (part.type === "month") {
+            leap = part.value.includes("閏") || part.value.includes("闰");
+            const digits = parseInt(part.value.replace(/[^\d]/g, ""), 10);
+            if (!Number.isNaN(digits)) {
+              mNum = digits;
+            } else {
+              const zhMap = {
+                "正": 1, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
+                "七": 7, "八": 8, "九": 9, "十": 10, "冬": 11, "十一": 11, "臘": 12, "腊": 12, "十二": 12
+              };
+              for (const k in zhMap) {
+                if (part.value.includes(k)) {
+                  mNum = zhMap[k];
+                  break;
+                }
+              }
+            }
+          } else if (part.type === "day") {
+            const parsed = parseInt(part.value.replace(/[^\d]/g, ""), 10);
+            if (!Number.isNaN(parsed)) dNum = parsed;
+          }
+        }
+
+        if (dNum === 1 && mNum) {
+          const mWord = (leap ? "閏" : "") + (LUNAR_MONTH_WORDS[mNum - 1] || `${mNum}`);
+          return { text: `${mWord}月初一`, isMonthStart: true };
+        }
+        if (dNum && dNum >= 1 && dNum <= 30) {
+          return { text: LUNAR_DAY_WORDS[dNum - 1], isMonthStart: false };
+        }
+      } catch (_) {}
+      return { text: "", isMonthStart: false };
+    }
+
+    function buildMonthMatrix(year, month0) {
+      const firstOfMonth = new Date(year, month0, 1);
+      const startDow = firstOfMonth.getDay();
+      const daysInCur = new Date(year, month0 + 1, 0).getDate();
+      const daysInPrev = new Date(year, month0, 0).getDate();
+      const totalSlots = startDow + daysInCur > 35 ? 42 : 35;
+
+      const today = new Date();
+      const tY = today.getFullYear();
+      const tM = today.getMonth();
+      const tD = today.getDate();
+
+      const cells = [];
+      for (let idx = 0; idx < totalSlots; idx++) {
+        let cellY = year;
+        let cellM = month0;
+        let dayVal;
+        let dimmed = false;
+
+        if (idx < startDow) {
+          dayVal = daysInPrev - (startDow - 1 - idx);
+          cellM = month0 - 1;
+          if (cellM < 0) {
+            cellM = 11;
+            cellY = year - 1;
+          }
+          dimmed = true;
+        } else if (idx >= startDow + daysInCur) {
+          dayVal = idx - (startDow + daysInCur) + 1;
+          cellM = month0 + 1;
+          if (cellM > 11) {
+            cellM = 0;
+            cellY = year + 1;
+          }
+          dimmed = true;
+        } else {
+          dayVal = idx - startDow + 1;
+        }
+
+        const isToday = cellY === tY && cellM === tM && dayVal === tD;
+        const lunar = getLunarText(new Date(cellY, cellM, dayVal));
+        cells.push({ dayVal, dimmed, isToday, lunar });
+      }
+      return cells;
+    }
+
+    function buildDomPage(year, month0) {
+      const page = document.createElement("article");
+      page.className = "calendar-dom-page";
+
+      const banner = document.createElement("div");
+      banner.className = "art-banner";
+      const img = document.createElement("img");
+      img.src = `images/${String(month0 + 1).padStart(2, "0")}.png`;
+      img.alt = `${year} ${MONTH_LABELS[month0]} illustration`;
+      banner.appendChild(img);
+      page.appendChild(banner);
+
+      const band = document.createElement("div");
+      band.className = "binding-band";
+      const holes = document.createElement("div");
+      holes.className = "wire-holes";
+      for (let h = 0; h < 22; h++) {
+        const dot = document.createElement("span");
+        dot.className = "wire-punch";
+        holes.appendChild(dot);
+      }
+      band.appendChild(holes);
+
+      const title = document.createElement("div");
+      title.className = "sheet-month-title";
+      title.textContent = `${MONTH_LABELS[month0]} ${year}`;
+      band.appendChild(title);
+      page.appendChild(band);
+
+      const wrap = document.createElement("div");
+      wrap.className = "month-grid-wrap";
+
+      const dowRow = document.createElement("div");
+      dowRow.className = "dow-row";
+      WEEKDAY_ABBR.forEach((abbr) => {
+        const el = document.createElement("span");
+        el.textContent = abbr;
+        dowRow.appendChild(el);
+      });
+      wrap.appendChild(dowRow);
+
+      const table = document.createElement("div");
+      table.className = "dates-table";
+
+      const cells = buildMonthMatrix(year, month0);
+      cells.forEach((c, idx) => {
+        const box = document.createElement("div");
+        box.className = "date-box";
+        if (c.dimmed) box.classList.add("dimmed");
+        if (c.isToday) box.classList.add("today-mark");
+
+        const header = document.createElement("div");
+        header.className = "box-header";
+
+        const solarEl = document.createElement("span");
+        solarEl.className = "solar-day";
+        if (!c.dimmed && (idx % 7 === 0 || idx % 7 === 6)) {
+          solarEl.style.color = "var(--accent-vermilion)";
+        }
+        solarEl.textContent = String(c.dayVal);
+
+        const lunarEl = document.createElement("span");
+        lunarEl.className = "lunar-tag" + (c.lunar.isMonthStart ? " month-start" : "");
+        lunarEl.textContent = c.lunar.text;
+
+        header.appendChild(solarEl);
+        header.appendChild(lunarEl);
+        box.appendChild(header);
+        table.appendChild(box);
+      });
+
+      wrap.appendChild(table);
+      page.appendChild(wrap);
+      return page;
+    }
+
+    // 依實測 DOM 高度繪製完整離屏畫布，確保與靜態頁面 1:1 像素對齊
+    async function renderFullSheetCanvas(year, month0, metrics) {
+      const { widthPx, heightPx, artHeightPx, bandHeightPx } = metrics;
+      const img = await loadMonthImage(month0);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const cw = Math.max(320, Math.round(widthPx * dpr));
+      const ch = Math.max(480, Math.round(heightPx * dpr));
+      const artH = Math.round(artHeightPx * dpr);
+      const bandH = Math.round(bandHeightPx * dpr);
+
+      const off = document.createElement("canvas");
+      off.width = cw;
+      off.height = ch;
+      const ctx = off.getContext("2d");
+
+      ctx.fillStyle = "#faf7f0";
+      ctx.fillRect(0, 0, cw, ch);
+
+      // 1. 上半部插畫
+      if (img) {
+        const imgRatio = img.width / img.height;
+        const boxRatio = cw / artH;
+        let sx = 0, sy = 0, sw = img.width, sh = img.height;
+        if (imgRatio > boxRatio) {
+          sw = img.height * boxRatio;
+          sx = (img.width - sw) * 0.5;
+        } else {
+          sh = img.width / boxRatio;
+          sy = (img.height - sh) * 0.5;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, artH);
+      } else {
+        ctx.fillStyle = "#e6dfd0";
+        ctx.fillRect(0, 0, cw, artH);
+      }
+
+      // 2. 中間裝訂線圈帶
+      const bandTop = artH;
+      const bandGrad = ctx.createLinearGradient(0, bandTop, 0, bandTop + bandH);
+      bandGrad.addColorStop(0, "#ece5d5");
+      bandGrad.addColorStop(0.38, "#f5f0e5");
+      bandGrad.addColorStop(1, "#f2ece0");
+      ctx.fillStyle = bandGrad;
+      ctx.fillRect(0, bandTop, cw, bandH);
+
+      ctx.strokeStyle = "rgba(90, 74, 56, 0.35)";
+      ctx.lineWidth = 1 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(0, bandTop);
+      ctx.lineTo(cw, bandTop);
+      ctx.moveTo(0, bandTop + bandH);
+      ctx.lineTo(cw, bandTop + bandH);
+      ctx.stroke();
+
+      const padX = 14 * dpr;
+      const holeCount = 22;
+      const holeY = bandTop + 9.5 * dpr;
+      ctx.fillStyle = "#4e453b";
+      for (let i = 0; i < holeCount; i++) {
+        const hx = padX + 4 * dpr + ((cw - (padX + 4 * dpr) * 2) * i) / (holeCount - 1);
+        ctx.beginPath();
+        ctx.arc(hx, holeY, 3.4 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "#231b14";
+      ctx.font = `600 ${Math.round(17.2 * dpr)}px "Noto Serif TC", "PingFang TC", serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${MONTH_LABELS[month0]} ${year}`, cw * 0.5, bandTop + bandH * 0.64);
+
+      // 3. 下半部星期與日期格
+      const dowY = bandTop + bandH + 17 * dpr;
+      const innerW = cw - padX * 2;
+      const colW = innerW / 7;
+      ctx.font = `600 ${Math.round(11.8 * dpr)}px "Noto Serif TC", sans-serif`;
+      ctx.textBaseline = "middle";
+
+      WEEKDAY_ABBR.forEach((abbr, idx) => {
+        ctx.fillStyle = (idx === 0 || idx === 6) ? "#b53f2b" : "#6a5d4f";
+        ctx.fillText(abbr, padX + colW * (idx + 0.5), dowY);
+      });
+
+      const gridTop = bandTop + bandH + 30 * dpr;
+      const gridBottom = ch - 16 * dpr;
+      const cells = buildMonthMatrix(year, month0);
+      const rows = Math.ceil(cells.length / 7);
+      const rowH = (gridBottom - gridTop) / rows;
+
+      ctx.strokeStyle = "rgba(90, 74, 56, 0.22)";
+      ctx.lineWidth = 1 * dpr;
+
+      cells.forEach((c, idx) => {
+        const r = Math.floor(idx / 7);
+        const col = idx % 7;
+        const x = padX + col * colW;
+        const y = gridTop + r * rowH;
+
+        if (c.isToday) {
+          ctx.fillStyle = "rgba(181, 63, 43, 0.08)";
+          ctx.fillRect(x, y, colW, rowH);
+        } else if (c.dimmed) {
+          ctx.fillStyle = "rgba(168, 155, 138, 0.08)";
+          ctx.fillRect(x, y, colW, rowH);
+        }
+
+        ctx.strokeRect(x, y, colW, rowH);
+
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.font = `600 ${Math.round(13.8 * dpr)}px "Noto Serif TC", sans-serif`;
+        if (c.dimmed) {
+          ctx.fillStyle = "#a39788";
+        } else if (col === 0 || col === 6) {
+          ctx.fillStyle = "#b53f2b";
+        } else {
+          ctx.fillStyle = "#231b14";
+        }
+        ctx.fillText(String(c.dayVal), x + 6 * dpr, y + 5 * dpr);
+
+        if (c.lunar.text) {
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.font = `${c.lunar.isMonthStart ? "700" : "400"} ${Math.round(9.9 * dpr)}px "Noto Serif TC", sans-serif`;
+          ctx.fillStyle = c.lunar.isMonthStart ? "#2c4b64" : "#6a5d4f";
+          ctx.fillText(c.lunar.text, x + colW - 5 * dpr, y + 6 * dpr);
+        }
+      });
+
+      return off;
+    }
+
+    // 從完整月曆畫布裁切上半部或下半部建立 Three.js 紋理
+    function createHalfTexture(sourceCanvas, startYRatio, endYRatio, flipVertical = false) {
+      const sy = Math.round(sourceCanvas.height * startYRatio);
+      const sh = Math.max(2, Math.round(sourceCanvas.height * (endYRatio - startYRatio)));
+      const sub = document.createElement("canvas");
+      sub.width = sourceCanvas.width;
+      sub.height = sh;
+      const sctx = sub.getContext("2d");
+
+      if (flipVertical) {
+        sctx.translate(0, sh);
+        sctx.scale(1, -1);
+      }
+      sctx.drawImage(sourceCanvas, 0, sy, sourceCanvas.width, sh, 0, 0, sub.width, sh);
+
+      const tex = new THREE.CanvasTexture(sub);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    const domMount = document.getElementById("domMount");
+    const calendarShell = document.getElementById("calendarShell");
+    const flipCanvas = document.getElementById("threeFlipCanvas");
+
+    const startNow = new Date();
+    let activeYear = startNow.getFullYear();
+    let activeMonth0 = startNow.getMonth();
+    let busyTurning = false;
+
+    function offsetYearMonth(y, m0, step) {
+      const sum = y * 12 + m0 + step;
+      return {
+        year: Math.floor(sum / 12),
+        month0: ((sum % 12) + 12) % 12
+      };
+    }
+
+    function mountStaticDom(year, month0) {
+      domMount.innerHTML = "";
+      const page = buildDomPage(year, month0);
+      domMount.appendChild(page);
+      return page;
+    }
+
+    // 以「中間裝訂線圈（hingeY）」為唯一軸心的雙面掛曆翻頁
+    async function runCenterHingeFlip(step) {
+      if (busyTurning || !window.THREE) {
+        const nextYM = offsetYearMonth(activeYear, activeMonth0, step);
+        activeYear = nextYM.year;
+        activeMonth0 = nextYM.month0;
+        mountStaticDom(activeYear, activeMonth0);
+        return;
+      }
+
+      busyTurning = true;
+
+      const shellRect = calendarShell.getBoundingClientRect();
+      const bannerEl = calendarShell.querySelector(".art-banner");
+      const bandEl = calendarShell.querySelector(".binding-band");
+
+      const widthPx = shellRect.width;
+      const heightPx = shellRect.height;
+      const artHeightPx = bannerEl ? bannerEl.offsetHeight : Math.round(widthPx * 0.75);
+      const bandHeightPx = bandEl ? bandEl.offsetHeight : 62;
+
+      // 精準中軸：中間線圈孔洞所在位置（artBanner 底部往下 9px）
+      const hingePxY = artHeightPx + 9;
+      const hingeRatio = hingePxY / heightPx;
+
+      const nextYM = offsetYearMonth(activeYear, activeMonth0, step);
+      const metrics = { widthPx, heightPx, artHeightPx, bandHeightPx };
+
+      const [curCanvas, targetCanvas] = await Promise.all([
+        renderFullSheetCanvas(activeYear, activeMonth0, metrics),
+        renderFullSheetCanvas(nextYM.year, nextYM.month0, metrics)
+      ]);
+
+      // 先將底層 DOM 換成目標月份，由 Three.js 完整覆蓋執行無接縫翻頁
+      mountStaticDom(nextYM.year, nextYM.month0);
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas: flipCanvas,
+        alpha: false,
+        antialias: true
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(widthPx, heightPx, false);
+      renderer.setClearColor(0xfaf7f0, 1);
+
+      const scene = new THREE.Scene();
+      const aspect = widthPx / heightPx;
+      const viewHeight = 2.0;
+      const viewWidth = viewHeight * aspect;
+      const fovDeg = 28;
+      const camera = new THREE.PerspectiveCamera(fovDeg, aspect, 0.05, 30);
+      const camDist = (viewHeight * 0.5) / Math.tan(THREE.MathUtils.degToRad(fovDeg * 0.5));
+      camera.position.set(0, 0, camDist);
+      camera.lookAt(0, 0, 0);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 1.05));
+      const dirLight = new THREE.DirectionalLight(0xfffaf0, 0.35);
+      dirLight.position.set(0.3, 0.8, 3.0);
+      scene.add(dirLight);
+
+      // 中軸在世界座標中的 Y 位置
+      const topHalfH = viewHeight * hingeRatio;
+      const botHalfH = viewHeight * (1 - hingeRatio);
+      const hingeWorldY = viewHeight * 0.5 - topHalfH;
+
+      // 準備上下半部紋理
+      const curTopTex = createHalfTexture(curCanvas, 0, hingeRatio, false);
+      const curBotTex = createHalfTexture(curCanvas, hingeRatio, 1, false);
+      const tgtTopTex = createHalfTexture(targetCanvas, 0, hingeRatio, false);
+      const tgtBotTex = createHalfTexture(targetCanvas, hingeRatio, 1, false);
+
+      const texturesToDispose = [curTopTex, curBotTex, tgtTopTex, tgtBotTex];
+      const geosToDispose = [];
+      const matsToDispose = [];
+
+      // 靜態底層上半部 & 下半部
+      const staticTopGeo = new THREE.PlaneGeometry(viewWidth, topHalfH);
+      const staticTopMat = new THREE.MeshBasicMaterial({
+        map: step > 0 ? curTopTex : tgtTopTex
+      });
+      const staticTopMesh = new THREE.Mesh(staticTopGeo, staticTopMat);
+      staticTopMesh.position.set(0, hingeWorldY + topHalfH * 0.5, 0);
+      scene.add(staticTopMesh);
+      geosToDispose.push(staticTopGeo);
+      matsToDispose.push(staticTopMat);
+
+      const staticBotGeo = new THREE.PlaneGeometry(viewWidth, botHalfH);
+      const staticBotMat = new THREE.MeshBasicMaterial({
+        map: step > 0 ? tgtBotTex : curBotTex
+      });
+      const staticBotMesh = new THREE.Mesh(staticBotGeo, staticBotMat);
+      staticBotMesh.position.set(0, hingeWorldY - botHalfH * 0.5, 0);
+      scene.add(staticBotMesh);
+      geosToDispose.push(staticBotGeo);
+      matsToDispose.push(staticBotMat);
+
+      // 翻動中的雙面紙頁（固定一邊在 hingeWorldY 中軸上，另一邊繞中軸旋轉 180°）
+      const leafH = step > 0 ? botHalfH : topHalfH;
+      const segX = 24;
+      const segY = 32;
+      const leafFrontGeo = new THREE.PlaneGeometry(viewWidth, leafH, segX, segY);
+      const leafBackGeo = new THREE.PlaneGeometry(viewWidth, leafH, segX, segY);
+
+      // 讓紙頁的 localY = 0 精準落在中軸線上
+      leafFrontGeo.translate(0, step > 0 ? -leafH * 0.5 : leafH * 0.5, 0);
+      leafBackGeo.translate(0, step > 0 ? -leafH * 0.5 : leafH * 0.5, 0);
+      // 背面法線朝向 -Z（翻轉 180° 後會正面朝向相機）
+      leafBackGeo.rotateY(Math.PI);
+
+      // 修正背面水平鏡像（繞 X 軸翻折 180° 時，左右不反轉、上下自然倒轉成另一半）
+      const backUv = leafBackGeo.attributes.uv;
+      for (let i = 0; i < backUv.count; i++) {
+        backUv.setXY(i, 1 - backUv.getX(i), 1 - backUv.getY(i));
+      }
+      backUv.needsUpdate = true;
+
+      const frontBase = new Float32Array(leafFrontGeo.attributes.position.array);
+      const backBase = new Float32Array(leafBackGeo.attributes.position.array);
+
+      const leafFrontMat = new THREE.MeshStandardMaterial({
+        map: step > 0 ? curBotTex : curTopTex,
+        roughness: 0.88,
+        metalness: 0.0,
+        side: THREE.FrontSide
+      });
+
+      const leafBackMat = new THREE.MeshStandardMaterial({
+        map: step > 0 ? tgtTopTex : tgtBotTex,
+        roughness: 0.88,
+        metalness: 0.0,
+        side: THREE.FrontSide
+      });
+
+      const leafGroup = new THREE.Group();
+      leafGroup.position.set(0, hingeWorldY, 0.004);
+      const frontMesh = new THREE.Mesh(leafFrontGeo, leafFrontMat);
+      const backMesh = new THREE.Mesh(leafBackGeo, leafBackMat);
+      leafGroup.add(frontMesh);
+      leafGroup.add(backMesh);
+      scene.add(leafGroup);
+
+      geosToDispose.push(leafFrontGeo, leafBackGeo);
+      matsToDispose.push(leafFrontMat, leafBackMat);
+
+      flipCanvas.classList.add("active");
+      playPaperFlipSound(step);
+
+      const duration = 700;
+      const startTime = performance.now();
+
+      function easeBookPage(t) {
+        return t < 0.5
+          ? 4 * t * t * t
+          : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      }
+
+      function applyPaperBend(geo, baseArr, progress, flipDir) {
+        const pos = geo.attributes.position;
+        // 紙張在翻過 90° 過程中產生自然拱起弧度
+        const archAmp = Math.sin(progress * Math.PI) * 0.13;
+        const baseAngle = progress * Math.PI * (flipDir > 0 ? -1 : 1);
+
+        for (let i = 0; i < pos.count; i++) {
+          const bx = baseArr[i * 3];
+          const by = baseArr[i * 3 + 1];
+          const bz = baseArr[i * 3 + 2];
+
+          // u: 0 在中軸線圈處（完全固定），1 在外緣（最先揚起）
+          const u = Math.min(1, Math.abs(by) / leafH);
+          const lagAngle = baseAngle * (1 - 0.14 * Math.sin(u * Math.PI));
+          const bendZ = Math.sin(u * Math.PI) * archAmp * (flipDir > 0 ? 1 : -1);
+
+          const cosA = Math.cos(lagAngle);
+          const sinA = Math.sin(lagAngle);
+          const localZ = bz + bendZ;
+
+          const ry = by * cosA - localZ * sinA;
+          const rz = by * sinA + localZ * cosA;
+          pos.setXYZ(i, bx, ry, rz);
+        }
+        pos.needsUpdate = true;
+        geo.computeVertexNormals();
+      }
+
+      function renderLoop(now) {
+        const rawT = Math.min(1, (now - startTime) / duration);
+        const e = easeBookPage(rawT);
+
+        // 當翻過上半部／下半部高度比例不同時，微調終點比例讓落點精準貼合另一半
+        applyPaperBend(leafFrontGeo, frontBase, e, step);
+        applyPaperBend(leafBackGeo, backBase, e, step);
+
+        // 翻頁過程中依開合角度調整底層明暗，呈現真實紙張陰影
+        const shade = 1 - Math.sin(e * Math.PI) * 0.14;
+        staticTopMat.color.setScalar(step > 0 ? shade : 1);
+        staticBotMat.color.setScalar(step > 0 ? 1 : shade);
+
+        renderer.render(scene, camera);
+
+        if (rawT < 1) {
+          requestAnimationFrame(renderLoop);
+        } else {
+          flipCanvas.classList.remove("active");
+          texturesToDispose.forEach((t) => t.dispose());
+          geosToDispose.forEach((g) => g.dispose());
+          matsToDispose.forEach((m) => m.dispose());
+          renderer.dispose();
+
+          activeYear = nextYM.year;
+          activeMonth0 = nextYM.month0;
+          busyTurning = false;
+        }
+      }
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    // 單指上下撥動翻頁（避免觸發整頁捲動）；兩指觸控時交由瀏覽器原生放大縮小
+    let singleTouchId = null;
+    let touchOriginY = 0;
+    let touchOriginX = 0;
+    let swipeTriggered = false;
+
+    calendarShell.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1 && !busyTurning) {
+        const t = e.touches[0];
+        singleTouchId = t.identifier;
+        touchOriginY = t.clientY;
+        touchOriginX = t.clientX;
+        swipeTriggered = false;
+      } else {
+        singleTouchId = null;
+        swipeTriggered = true;
+      }
+    }, { passive: true });
+
+    calendarShell.addEventListener("touchmove", (e) => {
+      if (e.touches.length > 1) {
+        singleTouchId = null;
+        swipeTriggered = true;
+        return;
+      }
+      if (singleTouchId === null || busyTurning) return;
+
+      const t = Array.from(e.touches).find((item) => item.identifier === singleTouchId);
+      if (!t) return;
+
+      const dy = t.clientY - touchOriginY;
+      const dx = t.clientX - touchOriginX;
+
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+        if (e.cancelable) e.preventDefault();
+      }
+
+      if (!swipeTriggered && Math.abs(dy) > 46 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+        swipeTriggered = true;
+        singleTouchId = null;
+        runCenterHingeFlip(dy < 0 ? 1 : -1);
+      }
+    }, { passive: false });
+
+    calendarShell.addEventListener("touchend", () => {
+      singleTouchId = null;
+    }, { passive: true });
+
+    mountStaticDom(activeYear, activeMonth0);
+  </script>
+</body>
+</html>
