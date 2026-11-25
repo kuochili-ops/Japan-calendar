@@ -26,6 +26,7 @@
       margin: 0;
       padding: 0;
       min-height: 100%;
+      overscroll-behavior-y: none;
       background-color: var(--washi-bg);
       background-image:
         radial-gradient(circle at 18% 12%, rgba(255, 252, 245, 0.8), transparent 45%),
@@ -38,10 +39,12 @@
       padding: 10px 10px 32px;
     }
 
+    /* 允許雙指放大縮小 (pinch-zoom)，單指垂直滑動由 JS 攔截翻頁以防止 Safari 下拉重整 */
     .calendar-shell {
       width: 100%;
       max-width: 680px;
-      touch-action: pan-x pan-y;
+      touch-action: pan-x pinch-zoom;
+      overscroll-behavior: none;
       position: relative;
       box-shadow: 0 16px 34px var(--paper-shadow);
       border-radius: 4px;
@@ -450,7 +453,6 @@
       return page;
     }
 
-    // 依實測 DOM 高度繪製完整離屏畫布，確保與靜態頁面 1:1 像素對齊
     async function renderFullSheetCanvas(year, month0, metrics) {
       const { widthPx, heightPx, artHeightPx, bandHeightPx } = metrics;
       const img = await loadMonthImage(month0);
@@ -468,7 +470,6 @@
       ctx.fillStyle = "#faf7f0";
       ctx.fillRect(0, 0, cw, ch);
 
-      // 1. 上半部插畫
       if (img) {
         const imgRatio = img.width / img.height;
         const boxRatio = cw / artH;
@@ -486,7 +487,6 @@
         ctx.fillRect(0, 0, cw, artH);
       }
 
-      // 2. 中間裝訂線圈帶
       const bandTop = artH;
       const bandGrad = ctx.createLinearGradient(0, bandTop, 0, bandTop + bandH);
       bandGrad.addColorStop(0, "#ece5d5");
@@ -521,7 +521,6 @@
       ctx.textBaseline = "middle";
       ctx.fillText(`${MONTH_LABELS[month0]} ${year}`, cw * 0.5, bandTop + bandH * 0.64);
 
-      // 3. 下半部星期與日期格
       const dowY = bandTop + bandH + 17 * dpr;
       const innerW = cw - padX * 2;
       const colW = innerW / 7;
@@ -582,7 +581,6 @@
       return off;
     }
 
-    // 從完整月曆畫布裁切上半部或下半部建立 Three.js 紋理
     function createHalfTexture(sourceCanvas, startYRatio, endYRatio, flipVertical = false) {
       const sy = Math.round(sourceCanvas.height * startYRatio);
       const sh = Math.max(2, Math.round(sourceCanvas.height * (endYRatio - startYRatio)));
@@ -627,7 +625,6 @@
       return page;
     }
 
-    // 以「中間裝訂線圈（hingeY）」為唯一軸心的雙面掛曆翻頁
     async function runCenterHingeFlip(step) {
       if (busyTurning || !window.THREE) {
         const nextYM = offsetYearMonth(activeYear, activeMonth0, step);
@@ -648,7 +645,6 @@
       const artHeightPx = bannerEl ? bannerEl.offsetHeight : Math.round(widthPx * 0.75);
       const bandHeightPx = bandEl ? bandEl.offsetHeight : 62;
 
-      // 精準中軸：中間線圈孔洞所在位置（artBanner 底部往下 9px）
       const hingePxY = artHeightPx + 9;
       const hingeRatio = hingePxY / heightPx;
 
@@ -660,7 +656,6 @@
         renderFullSheetCanvas(nextYM.year, nextYM.month0, metrics)
       ]);
 
-      // 先將底層 DOM 換成目標月份，由 Three.js 完整覆蓋執行無接縫翻頁
       mountStaticDom(nextYM.year, nextYM.month0);
 
       const renderer = new THREE.WebGLRenderer({
@@ -687,12 +682,10 @@
       dirLight.position.set(0.3, 0.8, 3.0);
       scene.add(dirLight);
 
-      // 中軸在世界座標中的 Y 位置
       const topHalfH = viewHeight * hingeRatio;
       const botHalfH = viewHeight * (1 - hingeRatio);
       const hingeWorldY = viewHeight * 0.5 - topHalfH;
 
-      // 準備上下半部紋理
       const curTopTex = createHalfTexture(curCanvas, 0, hingeRatio, false);
       const curBotTex = createHalfTexture(curCanvas, hingeRatio, 1, false);
       const tgtTopTex = createHalfTexture(targetCanvas, 0, hingeRatio, false);
@@ -702,7 +695,6 @@
       const geosToDispose = [];
       const matsToDispose = [];
 
-      // 靜態底層上半部 & 下半部
       const staticTopGeo = new THREE.PlaneGeometry(viewWidth, topHalfH);
       const staticTopMat = new THREE.MeshBasicMaterial({
         map: step > 0 ? curTopTex : tgtTopTex
@@ -723,20 +715,16 @@
       geosToDispose.push(staticBotGeo);
       matsToDispose.push(staticBotMat);
 
-      // 翻動中的雙面紙頁（固定一邊在 hingeWorldY 中軸上，另一邊繞中軸旋轉 180°）
       const leafH = step > 0 ? botHalfH : topHalfH;
       const segX = 24;
       const segY = 32;
       const leafFrontGeo = new THREE.PlaneGeometry(viewWidth, leafH, segX, segY);
       const leafBackGeo = new THREE.PlaneGeometry(viewWidth, leafH, segX, segY);
 
-      // 讓紙頁的 localY = 0 精準落在中軸線上
       leafFrontGeo.translate(0, step > 0 ? -leafH * 0.5 : leafH * 0.5, 0);
       leafBackGeo.translate(0, step > 0 ? -leafH * 0.5 : leafH * 0.5, 0);
-      // 背面法線朝向 -Z（翻轉 180° 後會正面朝向相機）
       leafBackGeo.rotateY(Math.PI);
 
-      // 修正背面水平鏡像（繞 X 軸翻折 180° 時，左右不反轉、上下自然倒轉成另一半）
       const backUv = leafBackGeo.attributes.uv;
       for (let i = 0; i < backUv.count; i++) {
         backUv.setXY(i, 1 - backUv.getX(i), 1 - backUv.getY(i));
@@ -785,7 +773,6 @@
 
       function applyPaperBend(geo, baseArr, progress, flipDir) {
         const pos = geo.attributes.position;
-        // 紙張在翻過 90° 過程中產生自然拱起弧度
         const archAmp = Math.sin(progress * Math.PI) * 0.13;
         const baseAngle = progress * Math.PI * (flipDir > 0 ? -1 : 1);
 
@@ -794,7 +781,6 @@
           const by = baseArr[i * 3 + 1];
           const bz = baseArr[i * 3 + 2];
 
-          // u: 0 在中軸線圈處（完全固定），1 在外緣（最先揚起）
           const u = Math.min(1, Math.abs(by) / leafH);
           const lagAngle = baseAngle * (1 - 0.14 * Math.sin(u * Math.PI));
           const bendZ = Math.sin(u * Math.PI) * archAmp * (flipDir > 0 ? 1 : -1);
@@ -815,11 +801,9 @@
         const rawT = Math.min(1, (now - startTime) / duration);
         const e = easeBookPage(rawT);
 
-        // 當翻過上半部／下半部高度比例不同時，微調終點比例讓落點精準貼合另一半
         applyPaperBend(leafFrontGeo, frontBase, e, step);
         applyPaperBend(leafBackGeo, backBase, e, step);
 
-        // 翻頁過程中依開合角度調整底層明暗，呈現真實紙張陰影
         const shade = 1 - Math.sin(e * Math.PI) * 0.14;
         staticTopMat.color.setScalar(step > 0 ? shade : 1);
         staticBotMat.color.setScalar(step > 0 ? 1 : shade);
@@ -844,14 +828,19 @@
       requestAnimationFrame(renderLoop);
     }
 
-    // 單指上下撥動翻頁（避免觸發整頁捲動）；兩指觸控時交由瀏覽器原生放大縮小
+    // 判斷目前是否處於兩指放大狀態
+    function isPinchZoomed() {
+      return window.visualViewport && window.visualViewport.scale > 1.03;
+    }
+
+    // 單指上下撥動翻頁，第一時間阻斷 iOS Safari 下拉重新整理；兩指觸控則完整交由瀏覽器縮放
     let singleTouchId = null;
     let touchOriginY = 0;
     let touchOriginX = 0;
     let swipeTriggered = false;
 
-    calendarShell.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 1 && !busyTurning) {
+    document.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1 && !busyTurning && !isPinchZoomed()) {
         const t = e.touches[0];
         singleTouchId = t.identifier;
         touchOriginY = t.clientY;
@@ -863,13 +852,14 @@
       }
     }, { passive: true });
 
-    calendarShell.addEventListener("touchmove", (e) => {
-      if (e.touches.length > 1) {
+    document.addEventListener("touchmove", (e) => {
+      // 兩指縮放或已放大瀏覽時，完全不攔截
+      if (e.touches.length > 1 || isPinchZoomed()) {
         singleTouchId = null;
         swipeTriggered = true;
         return;
       }
-      if (singleTouchId === null || busyTurning) return;
+      if (singleTouchId === null) return;
 
       const t = Array.from(e.touches).find((item) => item.identifier === singleTouchId);
       if (!t) return;
@@ -877,18 +867,19 @@
       const dy = t.clientY - touchOriginY;
       const dx = t.clientX - touchOriginX;
 
-      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+      // 只要是縱向單指滑動，立刻阻斷 Safari 下拉重整與頁面橡皮筋回彈
+      if (Math.abs(dy) >= Math.abs(dx)) {
         if (e.cancelable) e.preventDefault();
       }
 
-      if (!swipeTriggered && Math.abs(dy) > 46 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+      if (!swipeTriggered && !busyTurning && Math.abs(dy) > 42 && Math.abs(dy) > Math.abs(dx) * 1.2) {
         swipeTriggered = true;
         singleTouchId = null;
         runCenterHingeFlip(dy < 0 ? 1 : -1);
       }
     }, { passive: false });
 
-    calendarShell.addEventListener("touchend", () => {
+    document.addEventListener("touchend", () => {
       singleTouchId = null;
     }, { passive: true });
 
